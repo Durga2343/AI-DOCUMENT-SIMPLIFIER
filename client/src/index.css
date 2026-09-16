@@ -1,0 +1,144 @@
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+/* Theme configuration */
+@theme {
+  --color-brand-plum: #8B5CF6;
+  --color-brand-rose: #E879A8;
+  --color-brand-softrose: #F0A6C7;
+  --color-brand-bg: #100E14;
+  --color-brand-card: #1C1722;
+  --color-brand-border: #2A2433;
+  --color-brand-text: #F8F5FA;
+  --color-brand-muted: #A9A1AE;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: #100E14;
+  color: #F8F5FA;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+body ::selection {
+  background-color: rgba(139, 92, 246, 0.35);
+  color: #F0A6C7;
+}
+
+/* Background canvas styling */
+.gradient-bg {
+  background-color: #100E14;
+  background-image: 
+    radial-gradient(circle at 20% 15%, rgba(139, 92, 246, 0.08), transparent 40%),
+    radial-gradient(circle at 80% 25%, rgba(232, 121, 168, 0.06), transparent 35%),
+    radial-gradient(circle at 50% 85%, rgba(139, 92, 246, 0.05), transparent 45%);
+  background-attachment: fixed;
+}
+
+/* Card & Surface styling */
+.glass-panel {
+  background-color: #1C1722;
+  border: 1px solid #2A2433;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-panel-hover:hover {
+  border-color: rgba(139, 92, 246, 0.3);
+  box-shadow: 0 12px 35px -5px rgba(139, 92, 246, 0.12);
+  transform: translateY(-1px);
+}
+
+/* Primary Button - Refined Plum to Rose Gradient */
+.glow-button {
+  background: linear-gradient(135deg, #8B5CF6 0%, #E879A8 100%);
+  color: #ffffff;
+  font-weight: 600;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.3);
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+}
+
+.glow-button:hover {
+  background: linear-gradient(135deg, #7C3AED 0%, #D94680 100%);
+  box-shadow: 0 6px 18px rgba(139, 92, 246, 0.4);
+  transform: translateY(-1px);
+}
+
+.glow-button:active {
+  transform: scale(0.98);
+}
+
+.glow-button-secondary {
+  background-color: #1C1722;
+  color: #F8F5FA;
+  font-weight: 600;
+  padding: 0.625rem 1.25rem;
+  border-radius: 0.75rem;
+  border: 1px solid #2A2433;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.glow-button-secondary:hover {
+  background-color: #241E2C;
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+/* Inputs */
+.glow-input {
+  background-color: #16121C;
+  border: 1px solid #2A2433;
+  border-radius: 0.75rem;
+  padding: 0.625rem 1rem;
+  color: #F8F5FA;
+  transition: all 0.2s ease;
+}
+
+.glow-input::placeholder {
+  color: #6E6675;
+}
+
+.glow-input:focus {
+  outline: none;
+  border-color: #8B5CF6;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.25);
+  background-color: #1C1722;
+}
+
+/* Sleek custom scrollbars */
+.custom-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scroll::-webkit-scrollbar-track {
+  background: #100E14;
+  border-radius: 8px;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: #2A2433;
+  border-radius: 8px;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.4);
+}
