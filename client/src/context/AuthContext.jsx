@@ -4,7 +4,7 @@ import axios from 'axios';
 export const AuthContext = createContext();
 
 // Base API URL config
-export const API_URL = 'http://localhost:5005/api';
+export const API_URL = 'https://ai-document-simplifier.onrender.com/api';
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
