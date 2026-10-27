@@ -13,6 +13,7 @@ const DocumentAssistant = ({ documentId }) => {
 
   // Translate state
   const [targetLanguage, setTargetLanguage] = useState('Spanish');
+  const [translatedLanguage, setTranslatedLanguage] = useState('');
   const [translationText, setTranslationText] = useState('');
   const [translatedResult, setTranslatedResult] = useState('');
   const [isTranslateLoading, setIsTranslateLoading] = useState(false);
@@ -25,7 +26,7 @@ const DocumentAssistant = ({ documentId }) => {
   // Auto-scroll chat
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, isChatLoading]);
 
   // Listen for text selection on the page for the 'explain' feature
   useEffect(() => {
@@ -40,11 +41,10 @@ const DocumentAssistant = ({ documentId }) => {
     return () => document.removeEventListener('mouseup', handleSelection);
   }, [activeTab]);
 
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!input.trim()) return;
+  const sendQuery = async (queryText) => {
+    if (!queryText.trim() || isChatLoading) return;
 
-    const userMessage = { role: 'user', text: input };
+    const userMessage = { role: 'user', text: queryText };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsChatLoading(true);
@@ -66,8 +66,13 @@ const DocumentAssistant = ({ documentId }) => {
     }
   };
 
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    await sendQuery(input);
+  };
+
   const handleTranslate = async () => {
-    if (!translationText.trim()) return;
+    if (!translationText.trim() || isTranslateLoading) return;
     setIsTranslateLoading(true);
     setTranslatedResult('');
     
@@ -78,6 +83,7 @@ const DocumentAssistant = ({ documentId }) => {
       });
       if (res.data.success) {
         setTranslatedResult(res.data.translatedText);
+        setTranslatedLanguage(targetLanguage);
       }
     } catch (err) {
       console.error(err);
@@ -88,7 +94,7 @@ const DocumentAssistant = ({ documentId }) => {
   };
 
   const handleExplain = async () => {
-    if (!highlightedText.trim()) return;
+    if (!highlightedText.trim() || isExplainLoading) return;
     setIsExplainLoading(true);
     setExplanation('');
 
@@ -106,6 +112,13 @@ const DocumentAssistant = ({ documentId }) => {
       setIsExplainLoading(false);
     }
   };
+
+  const quickPrompts = [
+    'What are the key terms & deadlines?',
+    'What are the main risks for me?',
+    'Can the landlord/party terminate early?',
+    'Are there any hidden fees or penalties?'
+  ];
 
   return (
     <div className="flex flex-col h-full bg-[#1C1722] rounded-3xl border border-[#2A2433] overflow-hidden shadow-xl">
@@ -155,8 +168,24 @@ const DocumentAssistant = ({ documentId }) => {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 9.75a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.184-4.183a1.14 1.14 0 0 1 .778-.332 48.294 48.294 0 0 0 5.83-.498c1.585-.233 2.708-1.626 2.708-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
                     </svg>
                   </div>
-                  <h3 className="text-white font-bold mb-1">Smart Document Assistant</h3>
-                  <p className="text-[#A9A1AE] text-xs leading-relaxed">Ask any question about this document! I have complete context of its extracted contents.</p>
+                  <h3 className="text-white font-bold mb-1">Fast AI Document Assistant</h3>
+                  <p className="text-[#A9A1AE] text-xs leading-relaxed mb-4">Ask any question about this document! I have full context of its contents.</p>
+                  
+                  <div className="w-full space-y-2 mt-1">
+                    <span className="text-[11px] font-semibold text-[#8B5CF6] uppercase tracking-wider block">Suggested Questions</span>
+                    <div className="flex flex-col gap-1.5 text-left">
+                      {quickPrompts.map((q, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => sendQuery(q)}
+                          className="text-xs bg-[#16121C] hover:bg-[#2A2433] text-[#F8F5FA] py-2 px-3 rounded-xl border border-[#2A2433] hover:border-[#8B5CF6]/50 transition-all text-left flex items-center justify-between group"
+                        >
+                          <span>{q}</span>
+                          <span className="text-[#8B5CF6] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 messages.map((msg, idx) => (
@@ -169,10 +198,13 @@ const DocumentAssistant = ({ documentId }) => {
               )}
               {isChatLoading && (
                 <div className="flex justify-start">
-                  <div className="bg-[#100E14] text-[#A9A1AE] rounded-2xl rounded-bl-none px-4 py-3 border border-[#2A2433] flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#8B5CF6] animate-bounce"></span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#E879A8] animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#F0A6C7] animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                  <div className="bg-[#100E14] text-[#A9A1AE] rounded-2xl rounded-bl-none px-4 py-3 border border-[#2A2433] flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#8B5CF6] animate-bounce"></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#E879A8] animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#F0A6C7] animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                    </div>
+                    <span className="text-xs text-[#A9A1AE]">Thinking...</span>
                   </div>
                 </div>
               )}
@@ -211,10 +243,10 @@ const DocumentAssistant = ({ documentId }) => {
                 className="w-full bg-[#16121C] border border-[#2A2433] rounded-xl py-2 px-3 text-sm text-[#F8F5FA] focus:outline-none focus:border-[#E879A8]"
               >
                 <option value="Spanish">Spanish</option>
+                <option value="Hindi">Hindi</option>
                 <option value="French">French</option>
                 <option value="German">German</option>
-                <option value="Hindi">Hindi</option>
-                <option value="Chinese">Chinese (Simplified)</option>
+                <option value="Chinese (Simplified)">Chinese (Simplified)</option>
                 <option value="Arabic">Arabic</option>
                 <option value="Japanese">Japanese</option>
                 <option value="Portuguese">Portuguese</option>
@@ -241,7 +273,17 @@ const DocumentAssistant = ({ documentId }) => {
 
             {translatedResult && (
               <div className="mt-4 p-4 rounded-2xl bg-[#8B5CF6]/15 border border-[#8B5CF6]/30">
-                <h4 className="text-xs font-bold text-[#F0A6C7] uppercase tracking-wider mb-2">Translation ({targetLanguage})</h4>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-bold text-[#F0A6C7] uppercase tracking-wider">
+                    Translation ({translatedLanguage || targetLanguage})
+                  </h4>
+                  <button 
+                    onClick={() => navigator.clipboard.writeText(translatedResult)}
+                    className="text-xs text-[#A9A1AE] hover:text-white transition-colors"
+                  >
+                    Copy
+                  </button>
+                </div>
                 <p className="text-sm text-[#F8F5FA] whitespace-pre-wrap leading-relaxed">{translatedResult}</p>
               </div>
             )}
@@ -286,7 +328,15 @@ const DocumentAssistant = ({ documentId }) => {
 
             {explanation && (
               <div className="mt-4 p-4 rounded-2xl bg-[#E879A8]/15 border border-[#E879A8]/30">
-                <h4 className="text-xs font-bold text-[#F0A6C7] uppercase tracking-wider mb-2">Plain English Breakdown</h4>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-bold text-[#F0A6C7] uppercase tracking-wider">Plain English Breakdown</h4>
+                  <button 
+                    onClick={() => navigator.clipboard.writeText(explanation)}
+                    className="text-xs text-[#A9A1AE] hover:text-white transition-colors"
+                  >
+                    Copy
+                  </button>
+                </div>
                 <p className="text-sm text-[#F8F5FA] whitespace-pre-wrap leading-relaxed">{explanation}</p>
               </div>
             )}

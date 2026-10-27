@@ -3,13 +3,23 @@ import axios from 'axios';
 
 export const AuthContext = createContext();
 
-// Base API URL config
-export const API_URL = 'https://ai-document-simplifier.onrender.com/api';
+// Base API URL config - uses environment variable if available, otherwise defaults to Render deployment
+export const API_URL = import.meta.env.VITE_API_URL || 'https://ai-document-simplifier.onrender.com/api';
+
+// Set default timeout for axios requests (60 seconds) to accommodate large AI processing and cold starts
+axios.defaults.timeout = 60000;
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
+
+  // Background wake-up ping for Render cold starts
+  useEffect(() => {
+    fetch(`${API_URL}/health`).catch(() => {
+      // Best-effort ping to spin up idle server
+    });
+  }, []);
 
   // Set Authorization Header in Axios helper
   const setAuthHeader = (jwtToken) => {
@@ -18,6 +28,17 @@ export const AuthProvider = ({ children }) => {
     } else {
       delete axios.defaults.headers.common['Authorization'];
     }
+  };
+
+  // Helper to extract descriptive error message
+  const getErrorMessage = (error, defaultMsg) => {
+    if (error.code === 'ECONNABORTED' || error.message?.toLowerCase().includes('timeout')) {
+      return 'The backend server took too long to respond. Free tier servers take ~50s to wake up from sleep—please try again in a moment.';
+    }
+    if (!error.response && error.request) {
+      return 'Cannot connect to the backend server. The server may be asleep or offline.';
+    }
+    return error.response?.data?.message || defaultMsg;
   };
 
   // On App Mount / Token Change, Fetch Profile
@@ -74,7 +95,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Registration failed. Try again.',
+        message: getErrorMessage(error, 'Registration failed. Try again.'),
       };
     } finally {
       setLoading(false);
@@ -104,7 +125,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Invalid email or password.',
+        message: getErrorMessage(error, 'Invalid email or password.'),
       };
     } finally {
       setLoading(false);

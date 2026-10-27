@@ -21,9 +21,13 @@ app.use('/api/documents', require('./routes/documents'));
 app.use('/api/ai', require('./routes/ai'));
 app.use('/api/assistant', require('./routes/assistant'));
 
-// Base Route
+// Base & Health Routes
 app.get('/', (req, res) => {
   res.send('AI Document Simplifier API is running...');
+});
+
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ success: true, status: 'ok', uptime: process.uptime() });
 });
 
 // Port setting

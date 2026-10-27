@@ -1,18 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { protect } = require('../middleware/auth');
 const Document = require('../models/Document');
+const { generateWithFastFallback } = require('../config/gemini');
 
-// Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-
-// Helper to chunk text if needed for prompt limits
+// Helper to get efficient context for fast inference
 const getDocumentContext = (text) => {
-  // If the document is extremely large, we might want to trim it to fit in context window.
-  // Gemini 1.5 Flash has a very large context window (1M+ tokens), so we can pass most documents directly.
-  // We'll limit to first 100,000 characters just to be safe on payload size, though usually it handles more.
-  return text.substring(0, 100000);
+  if (!text) return '';
+  // Limiting context to 25,000 characters ensures ultra-low time-to-first-token while covering 10-15 pages
+  return text.length > 25000 ? text.substring(0, 25000) + '\n...[Content truncated for performance]' : text;
 };
 
 // @route   POST /api/assistant/chat/:documentId
@@ -37,29 +33,27 @@ router.post('/chat/:documentId', protect, async (req, res) => {
 
     const docContext = getDocumentContext(document.originalText);
     
-    // Format history for Gemini
-    const formattedHistory = (history || []).map(msg => ({
-      role: msg.role === 'user' ? 'user' : 'model',
-      parts: [{ text: msg.text }]
-    }));
+    // Format history for Gemini API
+    const formattedHistory = (history || [])
+      .filter(msg => msg && msg.text && msg.text.trim())
+      .map(msg => ({
+        role: msg.role === 'user' ? 'user' : 'model',
+        parts: [{ text: msg.text }]
+      }));
 
-    // Start chat session
-    const model = genAI.getGenerativeModel({ 
-      model: 'gemini-flash-latest',
-      systemInstruction: `You are a helpful AI assistant analyzing a document. Use the following document context to answer the user's questions. If the answer is not in the document, say so. Keep answers concise and helpful.\n\nDocument Context:\n---\n${docContext}\n---`
+    const result = await generateWithFastFallback({
+      systemInstruction: `You are a concise, helpful AI assistant analyzing a document. Use the following document context to answer the user's questions directly. If the answer is not in the document, state that clearly. Keep responses concise, direct, and easy to understand (usually 2-4 sentences unless detailed explanation is requested).\n\nDocument Context:\n---\n${docContext}\n---`,
+      chatHistory: formattedHistory,
+      message,
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 800,
+      }
     });
-
-    const chat = model.startChat({
-      history: formattedHistory,
-    });
-
-    const result = await chat.sendMessage(message);
-    const response = await result.response;
-    const text = response.text();
 
     res.status(200).json({
       success: true,
-      reply: text
+      reply: result.text
     });
 
   } catch (err) {
@@ -69,7 +63,7 @@ router.post('/chat/:documentId', protect, async (req, res) => {
 });
 
 // @route   POST /api/assistant/translate/:documentId
-// @desc    Translate document summary to a target language
+// @desc    Translate document text to a target language
 // @access  Protected
 router.post('/translate/:documentId', protect, async (req, res) => {
   try {
@@ -79,16 +73,19 @@ router.post('/translate/:documentId', protect, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Text and targetLanguage are required.' });
     }
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
-    const prompt = `You are a professional translator. Translate the following text into ${targetLanguage}. Maintain the original tone and formatting.\n\nText to translate:\n---\n${text}\n---`;
+    const prompt = `You are a professional translator. Translate the following text into ${targetLanguage}. Maintain the original formatting, meaning, and tone. Output ONLY the translated text without commentary, pleasantries, alternative versions, or markdown code fences.\n\nText to translate:\n---\n${text.substring(0, 30000)}\n---`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const translatedText = response.text().trim();
+    const result = await generateWithFastFallback({
+      prompt,
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 2048,
+      }
+    });
 
     res.status(200).json({
       success: true,
-      translatedText
+      translatedText: result.text
     });
 
   } catch (err) {
@@ -117,18 +114,19 @@ router.post('/explain/:documentId', protect, async (req, res) => {
       return res.status(403).json({ success: false, message: 'Access denied.' });
     }
 
-    // Pass the highlighted text and a snippet of the document for context if needed, 
-    // but the highlighted text itself is usually enough for a plain English explanation.
-    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
-    const prompt = `You are a legal and technical expert. A user has highlighted a complex clause from their document. Explain this specific clause in plain, simple English (like explaining to a 10-year-old). Also mention any potential risks or important implications of this clause.\n\nHighlighted Clause:\n---\n${highlightedText}\n---`;
+    const prompt = `You are an expert who explains complex legal, contract, and technical jargon in plain, simple English. Explain the following clause in 2 to 4 concise sentences. Explain clearly what it means in simple terms and point out any key risks, responsibilities, or hidden conditions. Output ONLY the plain English explanation.\n\nClause to explain:\n---\n${highlightedText.substring(0, 10000)}\n---`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const explanation = response.text().trim();
+    const result = await generateWithFastFallback({
+      prompt,
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 600,
+      }
+    });
 
     res.status(200).json({
       success: true,
-      explanation
+      explanation: result.text
     });
 
   } catch (err) {

@@ -1,12 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { protect } = require('../middleware/auth');
 const Document = require('../models/Document');
 const Summary = require('../models/Summary');
-
-// Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const { generateWithFastFallback } = require('../config/gemini');
 
 // Chunk text into pieces under 28,000 chars for safe Gemini token limits
 const chunkText = (text, maxChunkSize = 28000) => {
@@ -38,20 +35,16 @@ const buildPrompt = (text, isChunk = false, chunkIndex = 1, totalChunks = 1) => 
 
   return `${chunkContext}You are an expert legal and technical document analyst. Analyze the following document text and return a structured JSON response.
 
-IMPORTANT: Return ONLY a valid JSON object — no markdown, no code fences, no explanation.
-
-Required JSON structure:
+Return a valid JSON object matching this structure:
 {
   "summary": "A concise 3-5 sentence executive summary of the document",
   "simplifiedText": "The full document rewritten in plain English that a 10-year-old could understand. Use simple words and short sentences.",
   "keyPoints": ["Point 1", "Point 2", "Point 3", "...up to 8 key points"],
   "faqs": [
-    {"question": "Frequently asked question", "answer": "Clear answer"},
-    "...2 to 5 FAQ pairs"
+    {"question": "Frequently asked question", "answer": "Clear answer"}
   ],
   "riskClauses": [
-    {"clause": "Exact or paraphrased risky clause text", "explanation": "Why this is risky", "severity": "High|Medium|Low"},
-    "...0 to 5 risk clauses if applicable, otherwise empty array"
+    {"clause": "Exact or paraphrased risky clause text", "explanation": "Why this is risky", "severity": "High|Medium|Low"}
   ],
   "confidenceScore": 85
 }
@@ -59,9 +52,7 @@ Required JSON structure:
 Document Text:
 ---
 ${text}
----
-
-Return only the JSON object:`;
+---`;
 };
 
 // Merge multiple chunk summaries into a final consolidated summary
@@ -73,9 +64,7 @@ const buildMergePrompt = (chunkSummaries) => {
   return `You are a document analyst. Below are separate JSON analyses of different chunks of one large document.
 Merge them into a single, unified, complete JSON analysis. Deduplicate key points, faqs, and risk clauses.
 
-IMPORTANT: Return ONLY a valid JSON object — no markdown, no code fences, no explanation.
-
-Required JSON structure:
+Return a valid JSON object matching this structure:
 {
   "summary": "Unified executive summary",
   "simplifiedText": "Merged simplified text of the entire document",
@@ -86,22 +75,22 @@ Required JSON structure:
 }
 
 Chunk analyses:
-${summariesText}
-
-Return only the merged JSON object:`;
+${summariesText}`;
 };
 
 // Call Gemini and parse the JSON response
 const callGemini = async (prompt) => {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY is not configured in the server environment.');
-  }
+  const result = await generateWithFastFallback({
+    prompt,
+    generationConfig: {
+      responseMimeType: 'application/json',
+      temperature: 0.2,
+      maxOutputTokens: 4096,
+    }
+  });
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
-  const result = await model.generateContent(prompt);
-  const responseText = result.response.text().trim();
-
-  // Strip markdown code fences if the model returns them despite instructions
+  const responseText = result.text.trim();
+  // Strip markdown code fences if present
   const cleaned = responseText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 
   try {
@@ -149,16 +138,16 @@ router.post('/process/:documentId', protect, async (req, res) => {
       const prompt = buildPrompt(text);
       analysisResult = await callGemini(prompt);
     } else {
-      // Multi-chunk processing
+      // Multi-chunk processing in parallel for high speed
       const chunks = chunkText(text);
-      console.log(`Document is large. Splitting into ${chunks.length} chunks.`);
+      console.log(`Document is large. Splitting into ${chunks.length} chunks (parallel processing).`);
 
-      const chunkResults = [];
-      for (let i = 0; i < chunks.length; i++) {
-        const prompt = buildPrompt(chunks[i], true, i + 1, chunks.length);
-        const chunkResult = await callGemini(prompt);
-        chunkResults.push(chunkResult);
-      }
+      const chunkPromises = chunks.map((chunk, i) => {
+        const prompt = buildPrompt(chunk, true, i + 1, chunks.length);
+        return callGemini(prompt);
+      });
+
+      const chunkResults = await Promise.all(chunkPromises);
 
       // Merge all chunk results
       const mergePrompt = buildMergePrompt(chunkResults);
